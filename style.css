@@ -1,0 +1,328 @@
+.ccpf-native-select,
+.ccpf-native-select2 {
+    display: none !important;
+}
+
+.ccpf-picker {
+    position: relative;
+    display: inline-flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+}
+
+.ccpf-picker-button {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    width: 100%;
+    min-width: 0;
+    min-height: 2.2rem;
+    cursor: pointer;
+    text-align: left;
+}
+
+.ccpf-picker-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ccpf-picker-arrow {
+    flex: 0 0 auto;
+    opacity: 0.75;
+}
+
+.ccpf-menu {
+    position: fixed;
+    z-index: 10050;
+    display: flex;
+    flex-direction: column;
+    max-height: min(70vh, 480px);
+    overflow: hidden;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.22));
+    border-radius: 10px;
+    background: var(--SmartThemeBlurTintColor, rgba(25, 25, 30, 0.97));
+    color: var(--SmartThemeBodyColor, #eee);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(14px);
+}
+
+.ccpf-menu[hidden] {
+    display: none !important;
+}
+
+.ccpf-menu-header {
+    display: flex;
+    gap: 0.45rem;
+    padding: 0.55rem;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.16));
+}
+
+.ccpf-search {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.ccpf-manage-button {
+    flex: 0 0 auto;
+}
+
+.ccpf-tree {
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 0.35rem;
+}
+
+.ccpf-folder-block + .ccpf-folder-block {
+    margin-top: 0.12rem;
+}
+
+.ccpf-folder-row,
+.ccpf-preset-row {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 2rem;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+}
+
+.ccpf-folder-row {
+    gap: 0.35rem;
+    padding: 0.28rem 0.5rem 0.28rem calc(0.45rem + var(--ccpf-depth, 0) * 0.85rem);
+    font-weight: 600;
+}
+
+.ccpf-preset-row {
+    gap: 0.45rem;
+    padding: 0.3rem 0.55rem 0.3rem calc(0.9rem + var(--ccpf-depth, 0) * 0.85rem);
+}
+
+.ccpf-folder-row:hover,
+.ccpf-folder-row:focus-visible,
+.ccpf-preset-row:hover,
+.ccpf-preset-row:focus-visible {
+    outline: none;
+    background: rgba(255, 255, 255, 0.09);
+}
+
+.ccpf-preset-row[aria-selected='true'] {
+    background: rgba(255, 255, 255, 0.13);
+    font-weight: 600;
+}
+
+.ccpf-chevron,
+.ccpf-folder-icon,
+.ccpf-preset-marker {
+    flex: 0 0 1rem;
+    width: 1rem;
+    text-align: center;
+}
+
+.ccpf-chevron,
+.ccpf-preset-marker {
+    opacity: 0.72;
+}
+
+.ccpf-folder-name,
+.ccpf-preset-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ccpf-folder-name,
+.ccpf-preset-name {
+    flex: 1 1 auto;
+}
+
+.ccpf-folder-count {
+    flex: 0 0 auto;
+    min-width: 1.6rem;
+    padding: 0.05rem 0.38rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.09);
+    font-size: 0.78rem;
+    font-weight: 500;
+    text-align: center;
+    opacity: 0.85;
+}
+
+.ccpf-empty,
+.ccpf-manager-empty {
+    padding: 1rem;
+    text-align: center;
+    opacity: 0.72;
+}
+
+.ccpf-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10100;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.58);
+}
+
+.ccpf-manager-modal {
+    display: flex;
+    flex-direction: column;
+    width: min(920px, 96vw);
+    max-height: min(800px, 92vh);
+    overflow: hidden;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.22));
+    border-radius: 12px;
+    background: var(--SmartThemeBlurTintColor, rgba(25, 25, 30, 0.98));
+    color: var(--SmartThemeBodyColor, #eee);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(18px);
+}
+
+.ccpf-manager-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1rem 0.75rem;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.16));
+}
+
+.ccpf-manager-header h3,
+.ccpf-manager-header p,
+.ccpf-manager-pane h4 {
+    margin: 0;
+}
+
+.ccpf-manager-header p {
+    margin-top: 0.3rem;
+    font-size: 0.88rem;
+    opacity: 0.72;
+}
+
+.ccpf-modal-close {
+    flex: 0 0 auto;
+    min-width: 2.2rem;
+    font-size: 1.3rem;
+}
+
+.ccpf-manager-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.12));
+}
+
+.ccpf-manager-body {
+    display: grid;
+    grid-template-columns: minmax(240px, 0.8fr) minmax(340px, 1.4fr);
+    min-height: 0;
+    overflow: hidden;
+}
+
+.ccpf-manager-pane {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding: 0.85rem;
+    overflow: hidden;
+}
+
+.ccpf-manager-pane + .ccpf-manager-pane {
+    border-left: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.14));
+}
+
+.ccpf-manager-folders,
+.ccpf-manager-presets {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+.ccpf-manager-folder-row,
+.ccpf-manager-preset-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.45rem;
+    padding: 0.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.065);
+}
+
+.ccpf-manager-folder-row {
+    padding-left: calc(0.25rem + var(--ccpf-depth, 0) * 0.85rem);
+}
+
+.ccpf-manager-folder-name,
+.ccpf-manager-preset-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ccpf-manager-folder-name,
+.ccpf-manager-preset-name {
+    flex: 1 1 auto;
+}
+
+.ccpf-manager-count {
+    flex: 0 0 auto;
+    opacity: 0.65;
+}
+
+.ccpf-icon-button {
+    flex: 0 0 auto;
+    min-width: 2rem;
+    padding-inline: 0.45rem !important;
+}
+
+.ccpf-assignment-select {
+    flex: 0 0 min(48%, 280px);
+    min-width: 145px;
+}
+
+@media (max-width: 700px) {
+    .ccpf-menu-header {
+        flex-wrap: wrap;
+    }
+
+    .ccpf-manage-button {
+        width: 100%;
+    }
+
+    .ccpf-manager-body {
+        grid-template-columns: 1fr;
+        overflow: auto;
+    }
+
+    .ccpf-manager-pane {
+        min-height: 280px;
+        overflow: visible;
+    }
+
+    .ccpf-manager-pane + .ccpf-manager-pane {
+        border-top: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.14));
+        border-left: 0;
+    }
+
+    .ccpf-manager-preset-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .ccpf-assignment-select {
+        width: 100%;
+        flex-basis: auto;
+    }
+}

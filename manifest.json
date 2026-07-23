@@ -1,0 +1,12 @@
+{
+  "display_name": "Chat Completion Preset Folders",
+  "author": "OpenAI for Andrie",
+  "version": "1.0.0",
+  "description": "Adds searchable, nested, collapsible folders to the Chat Completion preset selector without modifying preset files.",
+  "requires": [],
+  "optional": [],
+  "js": "index.js",
+  "css": "style.css",
+  "loading_order": 500,
+  "auto_update": false
+}

@@ -13,8 +13,7 @@ const PRESET_SOURCE = 'native-openai-select';
  * This extension never reads directories or preset files, never creates folders
  * on disk, and never calls a SillyTavern filesystem endpoint. The sole preset
  * source is the option list that SillyTavern has already populated in the native
- * #settings_preset_openai control. Folder names and assignments below are display-only UI metadata
- * stored in extension_settings[EXTENSION_KEY].
+ * #settings_preset_openai control. Folder names and assignments below are display-only UI metadata stored in extension_settings[EXTENSION_KEY].
  */
 
 const DEFAULT_SETTINGS = Object.freeze({
@@ -34,7 +33,6 @@ let selectObserver = null;
 let managerOverlay = null;
 let outsidePointerHandler = null;
 let resizeHandler = null;
-let interactionRoot = null;
 let isRendering = false;
 
 function getSettings() {
@@ -368,78 +366,59 @@ function updateButtonLabel() {
     pickerButton.title = current ? `Current preset: ${current.name}` : 'Choose Chat Completion preset';
 }
 
-function getInteractionRoot() {
-    if (interactionRoot?.isConnected) return interactionRoot;
-
-    interactionRoot = nativeSelect?.closest([
-        '#ai_response_configuration',
-        '.drawer-content',
-        '.inline-drawer-content',
-        '.drawer',
-    ].join(', ')) ?? picker?.parentElement ?? document.body;
-
-    return interactionRoot;
+function supportsPopover(element) {
+    return Boolean(element && typeof element.showPopover === 'function' && typeof element.hidePopover === 'function');
 }
 
-function stopDrawerClose(event) {
-    event.stopPropagation();
-}
-
-function protectDrawerInteraction(element) {
-    for (const eventName of ['pointerdown', 'mousedown', 'mouseup', 'click', 'touchstart', 'touchend']) {
-        element.addEventListener(eventName, stopDrawerClose);
+function showTopLayer(element) {
+    if (!supportsPopover(element)) return;
+    try {
+        if (!element.matches(':popover-open')) element.showPopover();
+    } catch (error) {
+        console.debug('[Preset Folders] Popover fallback active.', error);
     }
 }
 
-function getPickerBoundary() {
-    const root = getInteractionRoot();
-    const rect = root?.getBoundingClientRect?.();
-    const viewport = {
-        left: 0,
-        top: 0,
-        right: window.innerWidth,
-        bottom: window.innerHeight,
-    };
-
-    if (!rect || rect.width <= 0 || rect.height <= 0) return viewport;
-
-    return {
-        left: Math.max(viewport.left, rect.left),
-        top: Math.max(viewport.top, rect.top),
-        right: Math.min(viewport.right, rect.right),
-        bottom: Math.min(viewport.bottom, rect.bottom),
-    };
+function hideTopLayer(element) {
+    if (!supportsPopover(element)) return;
+    try {
+        if (element.matches(':popover-open')) element.hidePopover();
+    } catch (error) {
+        console.debug('[Preset Folders] Could not hide popover cleanly.', error);
+    }
 }
 
 function positionPicker() {
     if (!pickerMenu || !pickerButton || pickerMenu.hidden) return;
-
     const rect = pickerButton.getBoundingClientRect();
-    const boundary = getPickerBoundary();
-    const padding = 8;
-    const availableWidth = Math.max(160, boundary.right - boundary.left - padding * 2);
-    const width = Math.min(Math.max(rect.width, 300), availableWidth);
-    const leftInViewport = Math.min(
-        Math.max(boundary.left + padding, rect.left),
-        boundary.right - width - padding,
-    );
-
-    pickerMenu.style.width = `${width}px`;
-    pickerMenu.style.left = `${leftInViewport - rect.left}px`;
-
-    const roomBelow = Math.max(0, boundary.bottom - rect.bottom - padding);
-    const roomAbove = Math.max(0, rect.top - boundary.top - padding);
-    const openAbove = roomBelow < Math.min(260, roomAbove) && roomAbove > roomBelow;
-    const availableHeight = openAbove ? roomAbove : roomBelow;
-    const maxHeight = Math.max(96, Math.min(480, window.innerHeight * 0.7, availableHeight));
-
+    const viewportPadding = 8;
+    const estimatedHeight = Math.min(480, window.innerHeight * 0.7);
+    const roomBelow = window.innerHeight - rect.bottom - viewportPadding;
+    const openAbove = roomBelow < Math.min(estimatedHeight, 260) && rect.top > roomBelow;
     pickerMenu.classList.toggle('ccpf-open-above', openAbove);
-    pickerMenu.style.maxHeight = `${maxHeight}px`;
+
+    if (supportsPopover(pickerMenu)) {
+        const width = Math.min(Math.max(rect.width, 300), window.innerWidth - viewportPadding * 2);
+        pickerMenu.style.width = `${width}px`;
+        pickerMenu.style.left = `${Math.min(Math.max(viewportPadding, rect.left), window.innerWidth - width - viewportPadding)}px`;
+        pickerMenu.style.top = openAbove ? 'auto' : `${rect.bottom + 4}px`;
+        pickerMenu.style.bottom = openAbove ? `${window.innerHeight - rect.top + 4}px` : 'auto';
+        return;
+    }
+
+    // Older browsers: keep the dropdown inside the sidebar DOM instead of
+    // portalling it to document.body. This prevents drawer outside-click logic
+    // from closing the AI Response Configuration panel.
+    pickerMenu.style.width = 'max(100%, min(420px, calc(100vw - 16px)))';
+    pickerMenu.style.left = '0';
+    pickerMenu.style.top = openAbove ? 'auto' : 'calc(100% + 4px)';
+    pickerMenu.style.bottom = openAbove ? 'calc(100% + 4px)' : 'auto';
 }
 
 function openPicker() {
     if (!pickerMenu) return;
     pickerMenu.hidden = false;
+    showTopLayer(pickerMenu);
     pickerButton?.setAttribute('aria-expanded', 'true');
     searchInput.value = '';
     renderPickerTree();
@@ -449,6 +428,7 @@ function openPicker() {
 
 function closePicker() {
     if (!pickerMenu) return;
+    hideTopLayer(pickerMenu);
     pickerMenu.hidden = true;
     pickerButton?.setAttribute('aria-expanded', 'false');
 }
@@ -638,8 +618,7 @@ function openManager() {
     managerOverlay = document.createElement('div');
     managerOverlay.className = 'ccpf-modal-backdrop';
     managerOverlay.setAttribute('role', 'presentation');
-    managerOverlay.dataset.ccpfKeepDrawerOpen = 'true';
-    protectDrawerInteraction(managerOverlay);
+    managerOverlay.setAttribute('popover', 'manual');
 
     const modal = document.createElement('section');
     modal.className = 'ccpf-manager-modal';
@@ -692,9 +671,11 @@ function openManager() {
     body.append(folderPane, presetPane);
     modal.append(header, toolbar, body);
     managerOverlay.append(modal);
-    getInteractionRoot().append(managerOverlay);
+    picker.append(managerOverlay);
+    showTopLayer(managerOverlay);
 
     const closeManager = () => {
+        hideTopLayer(managerOverlay);
         managerOverlay?.remove();
         managerOverlay = null;
         pickerButton?.focus();
@@ -747,6 +728,7 @@ function buildPicker() {
     pickerMenu.className = 'ccpf-menu';
     pickerMenu.hidden = true;
     pickerMenu.setAttribute('role', 'listbox');
+    pickerMenu.setAttribute('popover', 'manual');
 
     const header = document.createElement('div');
     header.className = 'ccpf-menu-header';
@@ -762,10 +744,12 @@ function buildPicker() {
     tree.className = 'ccpf-tree';
     pickerMenu.append(header, tree);
 
-    picker.dataset.ccpfKeepDrawerOpen = 'true';
-    protectDrawerInteraction(picker);
+    // Keep the dropdown in the same DOM subtree as the AI Response panel.
+    // The Popover API promotes it visually without making it an outside click.
     picker.append(pickerButton, pickerMenu);
 
+    picker.addEventListener('pointerdown', event => event.stopPropagation());
+    picker.addEventListener('click', event => event.stopPropagation());
     pickerButton.addEventListener('click', togglePicker);
     searchInput.addEventListener('input', () => renderPickerTree(searchInput.value));
     manage.addEventListener('click', openManager);
@@ -876,7 +860,6 @@ function teardown() {
     picker?.remove();
     pickerMenu?.remove();
     managerOverlay?.remove();
-    interactionRoot = null;
     if (outsidePointerHandler) document.removeEventListener('pointerdown', outsidePointerHandler, true);
     if (resizeHandler) {
         window.removeEventListener('resize', resizeHandler);

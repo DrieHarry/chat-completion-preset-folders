@@ -1,28 +1,17 @@
 # Chat Completion Preset Folders for SillyTavern
 
-A SillyTavern UI extension that replaces the flat **Chat Completion preset** selector with a searchable tree of collapsible folders.
+A SillyTavern UI extension that replaces the flat **Chat Completion preset** selector with a searchable tree of nested, collapsible folders.
 
-## What changed in v1.2.0
+## What changed in v1.1.1
 
-- The preset dropdown now stays inside the AI Response Configuration drawer instead of being attached to the page body.
-- Clicking, searching, expanding folders, choosing presets, or opening the folder manager no longer counts as an outside click that closes the drawer.
-- Dropdown placement is still viewport-aware and opens above the button when there is not enough room below.
-- All interface wording now uses **Folder** and **Folders**.
+- The preset dropdown now stays inside the AI Response Configuration panel's DOM tree.
+- On supported browsers, the dropdown uses the Popover API so it can appear above surrounding UI without being treated as an outside click.
+- Interacting with the dropdown no longer intentionally closes the AI Response Configuration sidebar.
+- Older browsers use an inline positioned fallback within the same panel.
+- All visible wording now uses **Folder/Folders**.
+- Folders remain display-only metadata and never create disk directories or move preset files.
 
-Existing folder assignments from earlier versions are preserved automatically.
-
-## Display-only folder behavior
-
-The folders created by this extension exist only in the interface and in SillyTavern extension settings.
-
-The extension does **not**:
-
-- Scan the SillyTavern root directory
-- Read preset files or filesystem subfolders
-- Create, rename, move, copy, or delete folders on disk
-- Rewrite or move Chat Completion preset JSON files
-
-Presets are read only from SillyTavern's existing `#settings_preset_openai` selector. Folder names, nesting, assignments, and collapsed states are saved only as extension settings metadata.
+Existing folder assignments from earlier releases are preserved automatically.
 
 ## How preset loading works
 
@@ -42,9 +31,9 @@ OpenAI Settings/
 └── Utility - Summary.json
 ```
 
-Do not create category folders such as `OpenAI Settings/Realistic/`. SillyTavern's native preset loader may ignore files placed inside those subfolders.
+Do not create category directories such as `OpenAI Settings/Realistic/`. SillyTavern's native preset loader may ignore files placed inside those directories.
 
-After SillyTavern loads the flat preset list, this extension groups those same entries into folders in the UI. Assigning a preset to `Realistic` changes only its display metadata; the JSON file stays exactly where it is.
+After SillyTavern loads the flat preset list, this extension groups those same entries into folders in the UI. Assigning a preset to `Realistic` changes only the extension's display metadata; the JSON file stays exactly where it is.
 
 ## Features
 
@@ -54,7 +43,7 @@ After SillyTavern loads the flat preset list, this extension groups those same e
 - Folder manager for assigning existing presets
 - Persistent assignments and expanded/collapsed state
 - Live synchronization when presets are created, imported, renamed, selected, or deleted
-- In-drawer dropdown that keeps AI Response Configuration open
+- Sidebar-safe dropdown interaction
 - No preset-file rewriting or movement
 - No directory scanning or disk-folder management
 
@@ -99,9 +88,7 @@ The stored metadata contains folder IDs, names, nesting, sort order, collapsed s
 
 ## Compatibility
 
-The extension uses the native `#settings_preset_openai` control as its sole preset source and triggers the same `change` event as the stock UI. The replacement dropdown is mounted in the same drawer DOM tree as the native selector so SillyTavern keeps the AI Response Configuration panel open while it is used.
-
-Other extensions that completely replace the AI Response Configuration interface may require selector or CSS adjustments.
+The extension uses the native `#settings_preset_openai` control as its sole preset source and triggers the same `change` event as the stock UI. It uses the browser Popover API when available and falls back to an inline dropdown otherwise. Other extensions that completely replace the AI Response Configuration interface may require selector or CSS adjustments.
 
 ## License
 

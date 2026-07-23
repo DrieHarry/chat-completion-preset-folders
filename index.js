@@ -13,8 +13,8 @@ const PRESET_SOURCE = 'native-openai-select';
  * This extension never reads directories or preset files, never creates folders
  * on disk, and never calls a SillyTavern filesystem endpoint. The sole preset
  * source is the option list that SillyTavern has already populated in the native
- * #settings_preset_openai control. Folder names and assignments below are purely
- * virtual UI metadata stored in extension_settings[EXTENSION_KEY].
+ * #settings_preset_openai control. Folder names and assignments below are display-only UI metadata
+ * stored in extension_settings[EXTENSION_KEY].
  */
 
 const DEFAULT_SETTINGS = Object.freeze({
@@ -34,6 +34,7 @@ let selectObserver = null;
 let managerOverlay = null;
 let outsidePointerHandler = null;
 let resizeHandler = null;
+let interactionRoot = null;
 let isRendering = false;
 
 function getSettings() {
@@ -367,20 +368,73 @@ function updateButtonLabel() {
     pickerButton.title = current ? `Current preset: ${current.name}` : 'Choose Chat Completion preset';
 }
 
+function getInteractionRoot() {
+    if (interactionRoot?.isConnected) return interactionRoot;
+
+    interactionRoot = nativeSelect?.closest([
+        '#ai_response_configuration',
+        '.drawer-content',
+        '.inline-drawer-content',
+        '.drawer',
+    ].join(', ')) ?? picker?.parentElement ?? document.body;
+
+    return interactionRoot;
+}
+
+function stopDrawerClose(event) {
+    event.stopPropagation();
+}
+
+function protectDrawerInteraction(element) {
+    for (const eventName of ['pointerdown', 'mousedown', 'mouseup', 'click', 'touchstart', 'touchend']) {
+        element.addEventListener(eventName, stopDrawerClose);
+    }
+}
+
+function getPickerBoundary() {
+    const root = getInteractionRoot();
+    const rect = root?.getBoundingClientRect?.();
+    const viewport = {
+        left: 0,
+        top: 0,
+        right: window.innerWidth,
+        bottom: window.innerHeight,
+    };
+
+    if (!rect || rect.width <= 0 || rect.height <= 0) return viewport;
+
+    return {
+        left: Math.max(viewport.left, rect.left),
+        top: Math.max(viewport.top, rect.top),
+        right: Math.min(viewport.right, rect.right),
+        bottom: Math.min(viewport.bottom, rect.bottom),
+    };
+}
+
 function positionPicker() {
     if (!pickerMenu || !pickerButton || pickerMenu.hidden) return;
-    const rect = pickerButton.getBoundingClientRect();
-    const viewportPadding = 8;
-    const width = Math.min(Math.max(rect.width, 300), window.innerWidth - viewportPadding * 2);
-    pickerMenu.style.width = `${width}px`;
-    pickerMenu.style.left = `${Math.min(Math.max(viewportPadding, rect.left), window.innerWidth - width - viewportPadding)}px`;
 
-    const estimatedHeight = Math.min(480, window.innerHeight * 0.7);
-    const roomBelow = window.innerHeight - rect.bottom - viewportPadding;
-    const openAbove = roomBelow < Math.min(estimatedHeight, 260) && rect.top > roomBelow;
+    const rect = pickerButton.getBoundingClientRect();
+    const boundary = getPickerBoundary();
+    const padding = 8;
+    const availableWidth = Math.max(160, boundary.right - boundary.left - padding * 2);
+    const width = Math.min(Math.max(rect.width, 300), availableWidth);
+    const leftInViewport = Math.min(
+        Math.max(boundary.left + padding, rect.left),
+        boundary.right - width - padding,
+    );
+
+    pickerMenu.style.width = `${width}px`;
+    pickerMenu.style.left = `${leftInViewport - rect.left}px`;
+
+    const roomBelow = Math.max(0, boundary.bottom - rect.bottom - padding);
+    const roomAbove = Math.max(0, rect.top - boundary.top - padding);
+    const openAbove = roomBelow < Math.min(260, roomAbove) && roomAbove > roomBelow;
+    const availableHeight = openAbove ? roomAbove : roomBelow;
+    const maxHeight = Math.max(96, Math.min(480, window.innerHeight * 0.7, availableHeight));
+
     pickerMenu.classList.toggle('ccpf-open-above', openAbove);
-    pickerMenu.style.top = openAbove ? 'auto' : `${rect.bottom + 4}px`;
-    pickerMenu.style.bottom = openAbove ? `${window.innerHeight - rect.top + 4}px` : 'auto';
+    pickerMenu.style.maxHeight = `${maxHeight}px`;
 }
 
 function openPicker() {
@@ -408,9 +462,9 @@ function nextFolderOrder(parentId) {
     return siblings.length ? Math.max(...siblings.map(folder => folder.order)) + 1 : 0;
 }
 
-function createVirtualFolder(parentId = ROOT_ID) {
+function createFolder(parentId = ROOT_ID) {
     const parentName = parentId ? getSettings().folders[parentId]?.name : 'root';
-    const name = window.prompt(`New virtual folder name (inside ${parentName}):`, 'New Folder');
+    const name = window.prompt(`New folder name (inside ${parentName}):`, 'New Folder');
     if (!name?.trim()) return;
 
     const settings = getSettings();
@@ -427,10 +481,10 @@ function createVirtualFolder(parentId = ROOT_ID) {
     renderManager();
 }
 
-function renameVirtualFolder(folderId) {
+function renameFolder(folderId) {
     const folder = getSettings().folders[folderId];
     if (!folder) return;
-    const name = window.prompt('Rename virtual folder:', folder.name);
+    const name = window.prompt('Rename folder:', folder.name);
     if (!name?.trim() || name.trim() === folder.name) return;
     folder.name = name.trim();
     persist();
@@ -438,12 +492,12 @@ function renameVirtualFolder(folderId) {
     renderManager();
 }
 
-function deleteVirtualFolder(folderId) {
+function deleteFolder(folderId) {
     const settings = getSettings();
     const folder = settings.folders[folderId];
     if (!folder) return;
     const destinationName = folder.parentId ? settings.folders[folder.parentId]?.name : 'Uncategorized';
-    const confirmed = window.confirm(`Delete virtual folder “${folder.name}”? Its presets and subfolders will move to ${destinationName}. No preset files will be moved or deleted.`);
+    const confirmed = window.confirm(`Delete folder “${folder.name}”? Its presets and subfolders will move to ${destinationName}. No preset files will be moved or deleted.`);
     if (!confirmed) return;
 
     for (const child of folderChildren(folderId)) {
@@ -480,7 +534,7 @@ function renderManagerFolderTree(container) {
     if (!folders.length) {
         const empty = document.createElement('div');
         empty.className = 'ccpf-manager-empty';
-        empty.textContent = 'No virtual folders yet. Create one to organize the display.';
+        empty.textContent = 'No folders yet. Create one to organize the display.';
         container.append(empty);
         return;
     }
@@ -500,13 +554,13 @@ function renderManagerFolderTree(container) {
         count.textContent = String(descendantPresetCount(folder.id));
 
         const add = makeButton('menu_button ccpf-icon-button', '+', 'Add subfolder');
-        add.addEventListener('click', () => createVirtualFolder(folder.id));
+        add.addEventListener('click', () => createFolder(folder.id));
 
         const rename = makeButton('menu_button ccpf-icon-button', '✎', 'Rename folder');
-        rename.addEventListener('click', () => renameVirtualFolder(folder.id));
+        rename.addEventListener('click', () => renameFolder(folder.id));
 
         const remove = makeButton('menu_button ccpf-icon-button', '×', 'Delete folder');
-        remove.addEventListener('click', () => deleteVirtualFolder(folder.id));
+        remove.addEventListener('click', () => deleteFolder(folder.id));
 
         row.append(name, count, add, rename, remove);
         container.append(row);
@@ -584,6 +638,8 @@ function openManager() {
     managerOverlay = document.createElement('div');
     managerOverlay.className = 'ccpf-modal-backdrop';
     managerOverlay.setAttribute('role', 'presentation');
+    managerOverlay.dataset.ccpfKeepDrawerOpen = 'true';
+    protectDrawerInteraction(managerOverlay);
 
     const modal = document.createElement('section');
     modal.className = 'ccpf-manager-modal';
@@ -596,7 +652,7 @@ function openManager() {
     const titleWrap = document.createElement('div');
     const title = document.createElement('h3');
     title.id = 'ccpf-manager-title';
-    title.textContent = 'Chat Completion Virtual Preset Folders';
+    title.textContent = 'Chat Completion Preset Folders';
     const subtitle = document.createElement('p');
     subtitle.textContent = 'Display only: presets come from SillyTavern’s native OpenAI selector. No disk folders are read, created, renamed, moved, or deleted.';
     titleWrap.append(title, subtitle);
@@ -605,7 +661,7 @@ function openManager() {
 
     const toolbar = document.createElement('div');
     toolbar.className = 'ccpf-manager-toolbar';
-    const addRoot = makeButton('menu_button', '+ New virtual folder');
+    const addRoot = makeButton('menu_button', '+ New folder');
     const expandAll = makeButton('menu_button', 'Expand all');
     const collapseAll = makeButton('menu_button', 'Collapse all');
     toolbar.append(addRoot, expandAll, collapseAll);
@@ -616,7 +672,7 @@ function openManager() {
     const folderPane = document.createElement('section');
     folderPane.className = 'ccpf-manager-pane';
     const folderHeading = document.createElement('h4');
-    folderHeading.textContent = 'Virtual folders';
+    folderHeading.textContent = 'Folders';
     const folders = document.createElement('div');
     folders.className = 'ccpf-manager-folders';
     folderPane.append(folderHeading, folders);
@@ -636,7 +692,7 @@ function openManager() {
     body.append(folderPane, presetPane);
     modal.append(header, toolbar, body);
     managerOverlay.append(modal);
-    document.body.append(managerOverlay);
+    getInteractionRoot().append(managerOverlay);
 
     const closeManager = () => {
         managerOverlay?.remove();
@@ -648,7 +704,7 @@ function openManager() {
     managerOverlay.addEventListener('mousedown', event => {
         if (event.target === managerOverlay) closeManager();
     });
-    addRoot.addEventListener('click', () => createVirtualFolder(ROOT_ID));
+    addRoot.addEventListener('click', () => createFolder(ROOT_ID));
     expandAll.addEventListener('click', () => {
         for (const folder of Object.values(getSettings().folders)) folder.collapsed = false;
         getSettings().uncategorizedCollapsed = false;
@@ -699,15 +755,16 @@ function buildPicker() {
     searchInput.className = 'text_pole ccpf-search';
     searchInput.placeholder = 'Search Chat Completion presets…';
     searchInput.setAttribute('aria-label', 'Search Chat Completion presets');
-    const manage = makeButton('menu_button ccpf-manage-button', 'Virtual folders…', 'Manage display-only preset folders');
+    const manage = makeButton('menu_button ccpf-manage-button', 'Folders…', 'Manage display-only preset folders');
     header.append(searchInput, manage);
 
     const tree = document.createElement('div');
     tree.className = 'ccpf-tree';
     pickerMenu.append(header, tree);
 
-    picker.append(pickerButton);
-    document.body.append(pickerMenu);
+    picker.dataset.ccpfKeepDrawerOpen = 'true';
+    protectDrawerInteraction(picker);
+    picker.append(pickerButton, pickerMenu);
 
     pickerButton.addEventListener('click', togglePicker);
     searchInput.addEventListener('input', () => renderPickerTree(searchInput.value));
@@ -819,6 +876,7 @@ function teardown() {
     picker?.remove();
     pickerMenu?.remove();
     managerOverlay?.remove();
+    interactionRoot = null;
     if (outsidePointerHandler) document.removeEventListener('pointerdown', outsidePointerHandler, true);
     if (resizeHandler) {
         window.removeEventListener('resize', resizeHandler);
@@ -837,7 +895,7 @@ jQuery(() => {
     getSettings();
 
     if (mount()) {
-        notify('Display-only preset folders are ready. Use “Virtual folders…” to organize presets without changing files.');
+        notify('Display-only preset folders are ready. Use “Folders…” to organize presets without changing files.');
         return;
     }
 

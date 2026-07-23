@@ -35,7 +35,9 @@
 }
 
 .ccpf-menu {
-    position: fixed;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
     z-index: 10050;
     display: flex;
     flex-direction: column;
@@ -47,6 +49,11 @@
     color: var(--SmartThemeBodyColor, #eee);
     box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(14px);
+}
+
+.ccpf-menu.ccpf-open-above {
+    top: auto;
+    bottom: calc(100% + 4px);
 }
 
 .ccpf-menu[hidden] {

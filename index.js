@@ -4,9 +4,22 @@ import { saveSettingsDebounced } from '../../../../script.js';
 const EXTENSION_KEY = 'chat-completion-preset-folders';
 const SELECTOR = '#settings_preset_openai';
 const ROOT_ID = null;
+const SETTINGS_VERSION = 2;
+const PRESET_SOURCE = 'native-openai-select';
+
+/**
+ * Filesystem isolation policy
+ * ---------------------------
+ * This extension never reads directories or preset files, never creates folders
+ * on disk, and never calls a SillyTavern filesystem endpoint. The sole preset
+ * source is the option list that SillyTavern has already populated in the native
+ * #settings_preset_openai control. Folder names and assignments below are purely
+ * virtual UI metadata stored in extension_settings[EXTENSION_KEY].
+ */
 
 const DEFAULT_SETTINGS = Object.freeze({
-    version: 1,
+    version: SETTINGS_VERSION,
+    presetSource: PRESET_SOURCE,
     folders: {},
     assignments: {},
     uncategorizedCollapsed: false,
@@ -26,7 +39,8 @@ let isRendering = false;
 function getSettings() {
     extension_settings[EXTENSION_KEY] ??= structuredClone(DEFAULT_SETTINGS);
     const settings = extension_settings[EXTENSION_KEY];
-    settings.version ??= 1;
+    settings.version = SETTINGS_VERSION;
+    settings.presetSource = PRESET_SOURCE;
     settings.folders ??= {};
     settings.assignments ??= {};
     settings.uncategorizedCollapsed ??= false;
@@ -46,9 +60,13 @@ function notify(message, title = 'Preset Folders') {
 }
 
 function getPresets() {
-    if (!nativeSelect) return [];
+    if (!(nativeSelect instanceof HTMLSelectElement)) return [];
+
+    // Deliberately read only the options SillyTavern already loaded from its
+    // Chat Completion preset source. Do not interpret slashes as disk paths and
+    // do not attempt to discover files or directories independently.
     return Array.from(nativeSelect.options).map((option, index) => ({
-        name: option.textContent?.trim() || option.text,
+        name: String(option.textContent?.trim() || option.text || option.value),
         value: option.value,
         index,
         selected: option.selected,
@@ -390,9 +408,9 @@ function nextFolderOrder(parentId) {
     return siblings.length ? Math.max(...siblings.map(folder => folder.order)) + 1 : 0;
 }
 
-function createFolder(parentId = ROOT_ID) {
+function createVirtualFolder(parentId = ROOT_ID) {
     const parentName = parentId ? getSettings().folders[parentId]?.name : 'root';
-    const name = window.prompt(`New folder name (inside ${parentName}):`, 'New Folder');
+    const name = window.prompt(`New virtual folder name (inside ${parentName}):`, 'New Folder');
     if (!name?.trim()) return;
 
     const settings = getSettings();
@@ -409,10 +427,10 @@ function createFolder(parentId = ROOT_ID) {
     renderManager();
 }
 
-function renameFolder(folderId) {
+function renameVirtualFolder(folderId) {
     const folder = getSettings().folders[folderId];
     if (!folder) return;
-    const name = window.prompt('Rename folder:', folder.name);
+    const name = window.prompt('Rename virtual folder:', folder.name);
     if (!name?.trim() || name.trim() === folder.name) return;
     folder.name = name.trim();
     persist();
@@ -420,12 +438,12 @@ function renameFolder(folderId) {
     renderManager();
 }
 
-function deleteFolder(folderId) {
+function deleteVirtualFolder(folderId) {
     const settings = getSettings();
     const folder = settings.folders[folderId];
     if (!folder) return;
     const destinationName = folder.parentId ? settings.folders[folder.parentId]?.name : 'Uncategorized';
-    const confirmed = window.confirm(`Delete “${folder.name}”? Its presets and subfolders will move to ${destinationName}.`);
+    const confirmed = window.confirm(`Delete virtual folder “${folder.name}”? Its presets and subfolders will move to ${destinationName}. No preset files will be moved or deleted.`);
     if (!confirmed) return;
 
     for (const child of folderChildren(folderId)) {
@@ -462,7 +480,7 @@ function renderManagerFolderTree(container) {
     if (!folders.length) {
         const empty = document.createElement('div');
         empty.className = 'ccpf-manager-empty';
-        empty.textContent = 'No folders yet. Create a root folder to begin.';
+        empty.textContent = 'No virtual folders yet. Create one to organize the display.';
         container.append(empty);
         return;
     }
@@ -482,13 +500,13 @@ function renderManagerFolderTree(container) {
         count.textContent = String(descendantPresetCount(folder.id));
 
         const add = makeButton('menu_button ccpf-icon-button', '+', 'Add subfolder');
-        add.addEventListener('click', () => createFolder(folder.id));
+        add.addEventListener('click', () => createVirtualFolder(folder.id));
 
         const rename = makeButton('menu_button ccpf-icon-button', '✎', 'Rename folder');
-        rename.addEventListener('click', () => renameFolder(folder.id));
+        rename.addEventListener('click', () => renameVirtualFolder(folder.id));
 
         const remove = makeButton('menu_button ccpf-icon-button', '×', 'Delete folder');
-        remove.addEventListener('click', () => deleteFolder(folder.id));
+        remove.addEventListener('click', () => deleteVirtualFolder(folder.id));
 
         row.append(name, count, add, rename, remove);
         container.append(row);
@@ -578,16 +596,16 @@ function openManager() {
     const titleWrap = document.createElement('div');
     const title = document.createElement('h3');
     title.id = 'ccpf-manager-title';
-    title.textContent = 'Chat Completion Preset Folders';
+    title.textContent = 'Chat Completion Virtual Preset Folders';
     const subtitle = document.createElement('p');
-    subtitle.textContent = 'Folders are UI metadata. Your preset JSON files stay in SillyTavern’s normal flat directory.';
+    subtitle.textContent = 'Display only: presets come from SillyTavern’s native OpenAI selector. No disk folders are read, created, renamed, moved, or deleted.';
     titleWrap.append(title, subtitle);
     const close = makeButton('menu_button ccpf-modal-close', '×', 'Close');
     header.append(titleWrap, close);
 
     const toolbar = document.createElement('div');
     toolbar.className = 'ccpf-manager-toolbar';
-    const addRoot = makeButton('menu_button', '+ New root folder');
+    const addRoot = makeButton('menu_button', '+ New virtual folder');
     const expandAll = makeButton('menu_button', 'Expand all');
     const collapseAll = makeButton('menu_button', 'Collapse all');
     toolbar.append(addRoot, expandAll, collapseAll);
@@ -598,7 +616,7 @@ function openManager() {
     const folderPane = document.createElement('section');
     folderPane.className = 'ccpf-manager-pane';
     const folderHeading = document.createElement('h4');
-    folderHeading.textContent = 'Folders';
+    folderHeading.textContent = 'Virtual folders';
     const folders = document.createElement('div');
     folders.className = 'ccpf-manager-folders';
     folderPane.append(folderHeading, folders);
@@ -630,7 +648,7 @@ function openManager() {
     managerOverlay.addEventListener('mousedown', event => {
         if (event.target === managerOverlay) closeManager();
     });
-    addRoot.addEventListener('click', () => createFolder(ROOT_ID));
+    addRoot.addEventListener('click', () => createVirtualFolder(ROOT_ID));
     expandAll.addEventListener('click', () => {
         for (const folder of Object.values(getSettings().folders)) folder.collapsed = false;
         getSettings().uncategorizedCollapsed = false;
@@ -681,7 +699,7 @@ function buildPicker() {
     searchInput.className = 'text_pole ccpf-search';
     searchInput.placeholder = 'Search Chat Completion presets…';
     searchInput.setAttribute('aria-label', 'Search Chat Completion presets');
-    const manage = makeButton('menu_button ccpf-manage-button', 'Folders…', 'Manage preset folders');
+    const manage = makeButton('menu_button ccpf-manage-button', 'Virtual folders…', 'Manage display-only preset folders');
     header.append(searchInput, manage);
 
     const tree = document.createElement('div');
@@ -724,7 +742,10 @@ function hideNativeControl() {
 
 function mount() {
     nativeSelect = document.querySelector(SELECTOR);
-    if (!nativeSelect || document.querySelector('.ccpf-picker')) return false;
+    if (!(nativeSelect instanceof HTMLSelectElement) || document.querySelector('.ccpf-picker')) return false;
+
+    // The native OpenAI preset selector is the only data source.
+    nativeSelect.dataset.ccpfPresetSource = PRESET_SOURCE;
 
     normalizeFolderGraph();
     pruneAssignments();
@@ -808,6 +829,7 @@ function teardown() {
         nativeSelect.removeAttribute('aria-hidden');
         nativeSelect.tabIndex = 0;
         nativeSelect.nextElementSibling?.classList.remove('ccpf-native-select2');
+        delete nativeSelect.dataset.ccpfPresetSource;
     }
 }
 
@@ -815,7 +837,7 @@ jQuery(() => {
     getSettings();
 
     if (mount()) {
-        notify('Nested preset folders are ready. Use “Folders…” in the preset picker to organize them.');
+        notify('Display-only preset folders are ready. Use “Virtual folders…” to organize presets without changing files.');
         return;
     }
 

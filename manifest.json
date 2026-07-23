@@ -1,8 +1,8 @@
 {
   "display_name": "Chat Completion Preset Folders",
   "author": "OpenAI for Andrie",
-  "version": "1.0.1",
-  "description": "Adds searchable, nested, collapsible folders to the Chat Completion preset selector without modifying preset files.",
+  "version": "1.1.0",
+  "description": "Adds searchable, nested, collapsible virtual folders to the Chat Completion preset selector. Preset files remain in SillyTavern's flat OpenAI Settings directory.",
   "requires": [],
   "optional": [],
   "js": "index.js",

@@ -36,6 +36,8 @@
 
 .ccpf-menu {
     position: absolute;
+    /* Dropdown-only typography: 0.5px smaller than the normal UI font. */
+    font-size: calc(1rem - 0.5px);
     inset: auto;
     margin: 0;
     z-index: 10050;
@@ -69,6 +71,16 @@
 .ccpf-search {
     min-width: 0;
     flex: 1 1 auto;
+}
+
+/* SillyTavern form controls may set their own font size, so explicitly scope
+   the 0.5px reduction to controls inside the preset dropdown only. */
+.ccpf-menu .ccpf-search,
+.ccpf-menu .ccpf-manage-button,
+.ccpf-menu .ccpf-folder-row,
+.ccpf-menu .ccpf-preset-row,
+.ccpf-menu .ccpf-empty {
+    font-size: calc(1rem - 0.5px);
 }
 
 .ccpf-manage-button {
@@ -156,7 +168,7 @@
     padding: 0.05rem 0.38rem;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.09);
-    font-size: 0.78rem;
+    font-size: calc(0.78rem - 0.5px);
     font-weight: 500;
     text-align: center;
     opacity: 0.85;

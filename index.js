@@ -398,7 +398,9 @@ function positionPicker() {
     pickerMenu.classList.toggle('ccpf-open-above', openAbove);
 
     if (supportsPopover(pickerMenu)) {
-        const width = Math.min(Math.max(rect.width, 300), window.innerWidth - viewportPadding * 2);
+        // Make the preset dropdown 1.4× wider than the trigger while keeping it
+        // inside the viewport. The previous 300px minimum scales to 420px.
+        const width = Math.min(Math.max(rect.width * 1.4, 420), window.innerWidth - viewportPadding * 2);
         pickerMenu.style.width = `${width}px`;
         pickerMenu.style.left = `${Math.min(Math.max(viewportPadding, rect.left), window.innerWidth - width - viewportPadding)}px`;
         pickerMenu.style.top = openAbove ? 'auto' : `${rect.bottom + 4}px`;
@@ -409,7 +411,7 @@ function positionPicker() {
     // Older browsers: keep the dropdown inside the sidebar DOM instead of
     // portalling it to document.body. This prevents drawer outside-click logic
     // from closing the AI Response Configuration panel.
-    pickerMenu.style.width = 'max(100%, min(420px, calc(100vw - 16px)))';
+    pickerMenu.style.width = 'min(calc(100vw - 16px), max(140%, 588px))';
     pickerMenu.style.left = '0';
     pickerMenu.style.top = openAbove ? 'auto' : 'calc(100% + 4px)';
     pickerMenu.style.bottom = openAbove ? 'calc(100% + 4px)' : 'auto';

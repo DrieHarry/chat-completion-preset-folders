@@ -2,14 +2,13 @@
 
 A SillyTavern UI extension that replaces the flat **Chat Completion preset** selector with a searchable tree of nested, collapsible folders.
 
-## What changed in v1.1.1
+## What changed in v1.1.2
 
-- The preset dropdown now stays inside the AI Response Configuration panel's DOM tree.
-- On supported browsers, the dropdown uses the Popover API so it can appear above surrounding UI without being treated as an outside click.
-- Interacting with the dropdown no longer intentionally closes the AI Response Configuration sidebar.
-- Older browsers use an inline positioned fallback within the same panel.
-- All visible wording now uses **Folder/Folders**.
-- Folders remain display-only metadata and never create disk directories or move preset files.
+- The preset dropdown is now 1.4 times wider than before.
+- Its width remains clamped to the available viewport on smaller screens.
+- Text inside the preset dropdown is 0.5px smaller.
+- The folder management window keeps its previous size and typography.
+- Sidebar-safe dropdown behavior and display-only folders are unchanged.
 
 Existing folder assignments from earlier releases are preserved automatically.
 

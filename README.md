@@ -2,13 +2,14 @@
 
 A SillyTavern UI extension that replaces the flat **Chat Completion preset** selector with a searchable tree of nested, collapsible folders.
 
-## What changed in v1.1.2
+## What changed in v1.1.4
 
-- The preset dropdown is now 1.4 times wider than before.
-- Its width remains clamped to the available viewport on smaller screens.
-- Text inside the preset dropdown is 0.5px smaller.
-- The folder management window keeps its previous size and typography.
-- Sidebar-safe dropdown behavior and display-only folders are unchanged.
+- Fixed the displayed preset name not updating after a Connection Profile loads a Chat Completion preset.
+- The extension now listens for SillyTavern's completed connection-profile and OpenAI-preset events.
+- It reconciles the hidden native selector by preset name without reloading the preset a second time.
+- The selected marker and dropdown tree are refreshed together with the side-panel label.
+- Text inside the preset dropdown is now another 1px smaller: 1.5px below the normal UI font.
+- The folder management window keeps its previous typography.
 
 Existing folder assignments from earlier releases are preserved automatically.
 

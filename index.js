@@ -34,6 +34,10 @@ let managerOverlay = null;
 let outsidePointerHandler = null;
 let resizeHandler = null;
 let isRendering = false;
+let syncFrame = null;
+let syncTimer = null;
+let registeredEventSource = null;
+const registeredEventHandlers = [];
 
 function getSettings() {
     extension_settings[EXTENSION_KEY] ??= structuredClone(DEFAULT_SETTINGS);
@@ -73,7 +77,45 @@ function getPresets() {
 }
 
 function selectedPreset() {
-    return getPresets().find(preset => preset.selected) ?? null;
+    if (!(nativeSelect instanceof HTMLSelectElement)) return null;
+
+    // Read the select's live value/selectedIndex properties directly. Some
+    // SillyTavern workflows (notably Connection Profiles) update the control
+    // programmatically without mutating the option's selected attribute.
+    const option = nativeSelect.selectedOptions?.[0]
+        ?? nativeSelect.options[nativeSelect.selectedIndex]
+        ?? Array.from(nativeSelect.options).find(candidate => candidate.value === nativeSelect.value)
+        ?? null;
+
+    if (!option) return null;
+    return {
+        name: String(option.textContent?.trim() || option.text || option.value),
+        value: option.value,
+        index: option.index,
+        selected: true,
+    };
+}
+
+function findPresetOptionByName(presetName) {
+    if (!(nativeSelect instanceof HTMLSelectElement) || !presetName) return null;
+    const normalized = String(presetName).trim();
+    return Array.from(nativeSelect.options).find(option =>
+        String(option.textContent?.trim() || option.text || option.value) === normalized
+    ) ?? null;
+}
+
+function reconcileNativeSelectionByName(presetName) {
+    const option = findPresetOptionByName(presetName);
+    if (!option) return false;
+
+    // Align only the native select's UI state. Do not dispatch change here: the
+    // preset has already been applied by SillyTavern, and firing another change
+    // would load it twice.
+    if (nativeSelect.value !== option.value || nativeSelect.selectedIndex !== option.index) {
+        nativeSelect.value = option.value;
+        nativeSelect.selectedIndex = option.index;
+    }
+    return true;
 }
 
 function newId() {
@@ -355,6 +397,7 @@ function renderPickerTree(query = '') {
         }
     } finally {
         isRendering = false;
+        if (!pickerMenu.hidden) requestAnimationFrame(positionPicker);
     }
 }
 
@@ -364,6 +407,45 @@ function updateButtonLabel() {
     const label = pickerButton.querySelector('.ccpf-picker-label');
     if (label) label.textContent = current?.name || 'Choose preset';
     pickerButton.title = current ? `Current preset: ${current.name}` : 'Choose Chat Completion preset';
+}
+
+function syncPickerUi(presetName = '') {
+    if (presetName) reconcileNativeSelectionByName(presetName);
+    hideNativeControl();
+    pruneAssignments();
+    updateButtonLabel();
+    renderPickerTree(searchInput?.value || '');
+    if (managerOverlay?.isConnected) renderManager();
+}
+
+function schedulePickerSync(presetName = '') {
+    if (syncFrame !== null) cancelAnimationFrame(syncFrame);
+    if (syncTimer !== null) window.clearTimeout(syncTimer);
+
+    syncFrame = requestAnimationFrame(() => {
+        syncFrame = null;
+        syncPickerUi(presetName);
+    });
+
+    // A short second pass catches Select2/native-select state that settles after
+    // async preset/profile handlers complete.
+    syncTimer = window.setTimeout(() => {
+        syncTimer = null;
+        syncPickerUi(presetName);
+    }, 160);
+}
+
+function selectedConnectionProfilePresetName() {
+    const contextSettings = window.SillyTavern?.getContext?.()?.extensionSettings;
+    const manager = contextSettings?.connectionManager ?? extension_settings.connectionManager;
+    const profile = manager?.profiles?.find(candidate => candidate.id === manager.selectedProfile);
+    return profile?.mode === 'cc' && typeof profile.preset === 'string' ? profile.preset : '';
+}
+
+function registerEventHandler(eventSource, eventType, handler) {
+    if (!eventType) return;
+    eventSource.on(eventType, handler);
+    registeredEventHandlers.push({ eventType, handler });
 }
 
 function supportsPopover(element) {
@@ -388,6 +470,38 @@ function hideTopLayer(element) {
     }
 }
 
+function numericCss(value) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function desiredPickerWidth(triggerRect, viewportPadding) {
+    const viewportWidth = Math.max(0, window.innerWidth - viewportPadding * 2);
+    const minimumWidth = Math.min(triggerRect.width, viewportWidth);
+    const maximumWidth = Math.min(triggerRect.width * 1.6, viewportWidth);
+    let contentWidth = minimumWidth;
+
+    // Size from the longest currently visible preset name. Folder rows may
+    // truncate, but preset names can expand the menu up to 1.6× the trigger.
+    const names = pickerMenu?.querySelectorAll('.ccpf-preset-name') ?? [];
+    for (const name of names) {
+        if (name.closest('[hidden]')) continue;
+        const row = name.closest('.ccpf-preset-row');
+        if (!row) continue;
+
+        const rowStyle = getComputedStyle(row);
+        const marker = row.querySelector('.ccpf-preset-marker');
+        const markerWidth = marker?.getBoundingClientRect().width ?? 0;
+        const gap = numericCss(rowStyle.columnGap || rowStyle.gap);
+        const horizontalPadding = numericCss(rowStyle.paddingLeft) + numericCss(rowStyle.paddingRight);
+        const scrollbarAllowance = 18;
+        const requiredWidth = name.scrollWidth + markerWidth + gap + horizontalPadding + scrollbarAllowance;
+        contentWidth = Math.max(contentWidth, requiredWidth);
+    }
+
+    return Math.ceil(Math.min(Math.max(contentWidth, minimumWidth), maximumWidth));
+}
+
 function positionPicker() {
     if (!pickerMenu || !pickerButton || pickerMenu.hidden) return;
     const rect = pickerButton.getBoundingClientRect();
@@ -395,14 +509,13 @@ function positionPicker() {
     const estimatedHeight = Math.min(480, window.innerHeight * 0.7);
     const roomBelow = window.innerHeight - rect.bottom - viewportPadding;
     const openAbove = roomBelow < Math.min(estimatedHeight, 260) && rect.top > roomBelow;
+    const width = desiredPickerWidth(rect, viewportPadding);
+    const viewportLeft = Math.min(Math.max(viewportPadding, rect.left), window.innerWidth - width - viewportPadding);
     pickerMenu.classList.toggle('ccpf-open-above', openAbove);
+    pickerMenu.style.width = `${width}px`;
 
     if (supportsPopover(pickerMenu)) {
-        // Make the preset dropdown 1.4× wider than the trigger while keeping it
-        // inside the viewport. The previous 300px minimum scales to 420px.
-        const width = Math.min(Math.max(rect.width * 1.4, 420), window.innerWidth - viewportPadding * 2);
-        pickerMenu.style.width = `${width}px`;
-        pickerMenu.style.left = `${Math.min(Math.max(viewportPadding, rect.left), window.innerWidth - width - viewportPadding)}px`;
+        pickerMenu.style.left = `${viewportLeft}px`;
         pickerMenu.style.top = openAbove ? 'auto' : `${rect.bottom + 4}px`;
         pickerMenu.style.bottom = openAbove ? `${window.innerHeight - rect.top + 4}px` : 'auto';
         return;
@@ -411,8 +524,7 @@ function positionPicker() {
     // Older browsers: keep the dropdown inside the sidebar DOM instead of
     // portalling it to document.body. This prevents drawer outside-click logic
     // from closing the AI Response Configuration panel.
-    pickerMenu.style.width = 'min(calc(100vw - 16px), max(140%, 588px))';
-    pickerMenu.style.left = '0';
+    pickerMenu.style.left = `${viewportLeft - rect.left}px`;
     pickerMenu.style.top = openAbove ? 'auto' : 'calc(100% + 4px)';
     pickerMenu.style.bottom = openAbove ? 'calc(100% + 4px)' : 'auto';
 }
@@ -800,18 +912,9 @@ function mount() {
         : null;
     (select2 || nativeSelect).insertAdjacentElement('afterend', picker);
 
-    nativeSelect.addEventListener('change', () => {
-        updateButtonLabel();
-        renderPickerTree(searchInput?.value || '');
-    });
+    nativeSelect.addEventListener('change', () => schedulePickerSync());
 
-    selectObserver = new MutationObserver(() => {
-        hideNativeControl();
-        pruneAssignments();
-        updateButtonLabel();
-        renderPickerTree(searchInput?.value || '');
-        if (managerOverlay?.isConnected) renderManager();
-    });
+    selectObserver = new MutationObserver(() => schedulePickerSync());
     selectObserver.observe(nativeSelect, {
         childList: true,
         subtree: true,
@@ -832,31 +935,63 @@ function registerPresetEvents() {
     const eventTypes = context?.event_types;
     if (!eventSource || !eventTypes) return;
 
-    if (eventTypes.PRESET_RENAMED) {
-        eventSource.on(eventTypes.PRESET_RENAMED, data => {
-            if (data?.apiId !== 'openai') return;
-            const settings = getSettings();
-            if (Object.hasOwn(settings.assignments, data.oldName)) {
-                settings.assignments[data.newName] = settings.assignments[data.oldName];
-                delete settings.assignments[data.oldName];
-                persist();
-            }
-        });
-    }
+    registeredEventSource = eventSource;
 
-    if (eventTypes.PRESET_DELETED) {
-        eventSource.on(eventTypes.PRESET_DELETED, data => {
-            if (data?.apiId !== 'openai') return;
-            const settings = getSettings();
-            if (Object.hasOwn(settings.assignments, data.name)) {
-                delete settings.assignments[data.name];
-                persist();
-            }
-        });
-    }
+    registerEventHandler(eventSource, eventTypes.PRESET_RENAMED, data => {
+        if (data?.apiId !== 'openai') return;
+        const settings = getSettings();
+        if (Object.hasOwn(settings.assignments, data.oldName)) {
+            settings.assignments[data.newName] = settings.assignments[data.oldName];
+            delete settings.assignments[data.oldName];
+            persist();
+        }
+        schedulePickerSync(data.newName);
+    });
+
+    registerEventHandler(eventSource, eventTypes.PRESET_DELETED, data => {
+        if (data?.apiId !== 'openai') return;
+        const settings = getSettings();
+        if (Object.hasOwn(settings.assignments, data.name)) {
+            delete settings.assignments[data.name];
+            persist();
+        }
+        schedulePickerSync();
+    });
+
+    // This event provides the authoritative preset name after SillyTavern has
+    // applied the OpenAI preset. It also covers /preset and other programmatic
+    // preset changes that may not dispatch a native DOM change event.
+    registerEventHandler(eventSource, eventTypes.PRESET_CHANGED, data => {
+        if (data?.apiId !== 'openai') return;
+        schedulePickerSync(data.name || '');
+    });
+
+    registerEventHandler(eventSource, eventTypes.OAI_PRESET_CHANGED_AFTER, () => {
+        schedulePickerSync();
+    });
+
+    // Connection Manager emits this only after all profile commands have
+    // completed. Reconcile by the profile's stored preset name so the side-panel
+    // label and selected marker match the prompts that were just loaded.
+    registerEventHandler(eventSource, eventTypes.CONNECTION_PROFILE_LOADED, () => {
+        schedulePickerSync(selectedConnectionProfilePresetName());
+    });
 }
 
 function teardown() {
+    if (syncFrame !== null) cancelAnimationFrame(syncFrame);
+    if (syncTimer !== null) window.clearTimeout(syncTimer);
+    syncFrame = null;
+    syncTimer = null;
+
+    if (registeredEventSource && typeof registeredEventSource.off === 'function') {
+        for (const { eventType, handler } of registeredEventHandlers) {
+            registeredEventSource.off(eventType, handler);
+        }
+    }
+    registeredEventHandlers.length = 0;
+    registeredEventSource = null;
+
     selectObserver?.disconnect();
     selectObserver = null;
     picker?.remove();
